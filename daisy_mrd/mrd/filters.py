@@ -34,9 +34,6 @@ Filter layers
    Removes positions whose alt-allele count is not significantly
    above the platform-level background noise rate (binomial test).
 
-6. **High-VAF filter** (:func:`filter_high_vaf`)
-   Removes positions with ``VAF >= 0.05``, which are likely to be
-   germline or systematic artefacts rather than true MRD signal.
 
 Notes
 -----
