@@ -17,8 +17,6 @@ Algorithm
    *below* the clonal peak mean. Variants that are NOT significantly
    below the peak are classified as **clonal**; the rest are **sub-clonal**.
 
-No patient-specific hard-coding is used. The algorithm is fully
-data-driven.
 """
 
 from __future__ import annotations
