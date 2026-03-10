@@ -145,8 +145,7 @@ results/001/mrd/
     ├── no_xy/
     ├── no_xy_no_200/
     ├── no_xy_no_germline/
-    ├── no_xy_no_germline_no_pon/
-    └── no_xy_no_germline_no_pon_no_hVAF/   ← used for final score
+    ├── no_xy_no_germline_no_pon/     ← used for final score
 ```
 
 
