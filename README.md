@@ -6,16 +6,6 @@ A Python package for WGS-based measurable residual disease (MRD) monitoring in p
 
 ---
 
-## Background
-
-DAISY-MRD identifies **Leukemia specific passenger variants (LSPVs)** - somatic mutations with no biological effect that are shared by the entire leukemic clone, and calculate an MRD score based in the patient specific LSPVs. 
-
-The method is described in:
-
-> Shiloh R\*, Dayan D\*, et al. *Passenger Variants as Pan-Clonal Markers of Pediatric AML: Implications for Molecular MRD.* Hemasphere, 2026.
-
----
-
 ## How it works
 
 ```
