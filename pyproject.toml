@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "daisy-mrd"
-version = "0.1.0"
+version = "0.1.1"
 description = "DAISY-MRD: Distributed Analysis of Integrated Sites for Yielding MRD — WGS-based measurable residual disease monitoring in pediatric AML"
 readme = "README.md"
 license = { text = "Technion" }
