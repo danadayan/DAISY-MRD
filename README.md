@@ -50,7 +50,7 @@ cd daisy-mrd
 pip install -e .
 ```
 
-### PyPI (**coming soon**)
+### PyPI (*coming soon*)
 
 ```bash
 pip install daisy-mrd
