@@ -474,9 +474,6 @@ def apply_all_filters(
         warnings.warn("PoN not provided — skipping PoN filter.")
     current = _save(current, "no_xy_no_germline_no_pon")
 
-    # Layer 6: high VAF
-    current = filter_high_vaf(current, max_vaf=max_vaf)
-    current = _save(current, "no_xy_no_germline_no_pon_no_hVAF")
 
     # Summary row
     summary = pd.DataFrame(
@@ -488,7 +485,6 @@ def apply_all_filters(
             "filter_xy_>200": [len(layers.get("no_xy_no_200", pd.DataFrame()))],
             "filter_germline": [len(layers.get("no_xy_no_germline", pd.DataFrame()))],
             "filter_pon": [len(layers.get("no_xy_no_germline_no_pon", pd.DataFrame()))],
-            "filter_VAF_lt0.05": [len(layers.get("no_xy_no_germline_no_pon_no_hVAF", pd.DataFrame()))],
         }
     )
 
