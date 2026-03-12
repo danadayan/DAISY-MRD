@@ -17,7 +17,7 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Technion License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
@@ -46,7 +46,7 @@ dev = [
 daisy-mrd = "daisy_mrd.cli:main"
 
 [project.urls]
-Repository = "https://github.com/maruvka-lab/daisy-mrd"
+Repository = "https://danadayan/daisy-mrd/daisy-mrd"
 
 [tool.setuptools.packages.find]
 where = ["."]
