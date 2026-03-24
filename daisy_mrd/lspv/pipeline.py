@@ -250,15 +250,13 @@ def run_lspv_pipeline(
     log.info("[%s] Loading annotated VCF into DataFrame", label)
     df = read_vcf(gnomad_vcf)
 
-    if run_vep_annotation:
-        log.info("[%s] Extracting VEP INFO fields", label)
-        df = extract_info(df)
-    else:
-        # Ensure columns exist even without VEP
-        if "hgvsp_short" not in df.columns:
-            df["hgvsp_short"] = None
-        if "so_term" not in df.columns:
-            df["so_term"] = None
+    # Always extract hgvsp_short and so_term from the INFO field.
+    # Even when run_vep_annotation=False, the VCF is already VEP-annotated
+    # so extract_info() can parse coding variants correctly.
+    # Without this, hgvsp_short is set to None for all variants and
+    # coding variants are never filtered out of LSPVs.
+    log.info("[%s] Extracting VEP INFO fields (hgvsp_short, so_term)", label)
+    df = extract_info(df)
 
     log.info("[%s] Applying hard filters (germline, rs, indel)", label)
     df = apply_hard_filters(df)
