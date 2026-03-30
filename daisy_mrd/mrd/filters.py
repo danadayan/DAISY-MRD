@@ -34,7 +34,6 @@ Filter layers
    Removes positions whose alt-allele count is not significantly
    above the platform-level background noise rate (binomial test).
 
-
 Notes
 -----
 The flanking-nucleotide step uses ``twobitreader`` to look up the
@@ -308,14 +307,15 @@ def filter_pon_remission(
         pon = pon.copy()
         pon["pos"] = pon["CHROM"].astype(str) + "_" + pon["POS"].astype(str)
 
-    merged = pd.merge(df, pon[["pos", "P_N"]], on="pos", how="left")
+    # Inner merge — matches original pd.merge default, drops variants not in PoN
+    merged = pd.merge(df, pon.loc[:,["pos", "P_N"]], on="pos")
 
     pvalues: list[float | None] = []
     for _, row in merged.iterrows():
-        p_n = row.get("P_N")
+        p_n = row["P_N"]
         k = int(row["read_num_match"])
         n = int(row["Read_Depth"])
-        if pd.isna(p_n) or n < 1:
+        if n < 1:
             pvalues.append(None)
         else:
             result = binomtest(k=k, n=n, p=float(p_n), alternative="greater")
@@ -325,38 +325,11 @@ def filter_pon_remission(
     merged["noise_pvalue"] = merged["noise_pvalue"].fillna(0)
     merged = merged.drop(columns=["pos", "P_N"], errors="ignore")
 
-    return merged[merged["noise_pvalue"] < pvalue_threshold].copy()
+    # No row filtering — keep all PoN-merged rows (df_filtered3 = df_filtered2)
+    # noise_pvalue is used only when computing the MRD score numerator
+    return merged.copy()
 
 
-# ---------------------------------------------------------------------------
-# Filter 6: High VAF
-# ---------------------------------------------------------------------------
-
-def filter_high_vaf(
-    df: pd.DataFrame,
-    max_vaf: float = 0.05,
-) -> pd.DataFrame:
-    """
-    Remove positions with ``VAF >= max_vaf``.
-
-    High-VAF positions in remission samples are more likely to be
-    residual germline artefacts or CHIP variants than true MRD signal.
-
-    Parameters
-    ----------
-    df : pd.DataFrame
-        Must have a ``VAF`` column (added by :func:`add_vaf`).
-    max_vaf : float
-        Default: 0.05.
-
-    Returns
-    -------
-    pd.DataFrame
-    """
-    if "VAF" not in df.columns:
-        warnings.warn("filter_high_vaf: 'VAF' column not found. Run add_vaf() first.")
-        return df
-    return df[df["VAF"] < max_vaf].copy()
 
 
 # ---------------------------------------------------------------------------
@@ -370,7 +343,6 @@ _LAYER_NAMES = [
     "no_xy_no_200",
     "no_xy_no_germline",
     "no_xy_no_germline_no_pon",
-    "no_xy_no_germline_no_pon_no_hVAF",
 ]
 
 
