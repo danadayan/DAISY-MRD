@@ -28,15 +28,16 @@ All figures and the LSPV CSV are saved to ``output_dir``.
 
 from __future__ import annotations
 
+import os
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Union
 
 import matplotlib.figure
 import pandas as pd
 
-from daisy_mrd.lspv.annotate import annotate_vcf, run_vep
-from daisy_mrd.lspv.filter import apply_hard_filters, filter_vcf_pass
+from daisy_mrd.lspv.filter import apply_hard_filters
 from daisy_mrd.lspv.gmm import (
     calculate_binomial_pvalues,
     fit_gmm,
@@ -48,6 +49,7 @@ from daisy_mrd.lspv.identify import extract_lspvs, lspv_summary, plot_clonality_
 from daisy_mrd.lspv.pon import filter_pon, load_pon
 from daisy_mrd.lspv.reads import extract_info, get_reads, get_vaf
 from daisy_mrd.utils import ensure_output_dir, read_vcf, resolve_pon_path
+from daisy_mrd.lspv.annotations import verify_vcf
 
 log = logging.getLogger(__name__)
 
@@ -87,32 +89,44 @@ class LspvResult:
     clonal_peak_mean: float
     output_dir: Path
 
+@dataclass
+class InputFiles:
+    vcf_file: Path
+    germline_file: Path
+    pon_file: Path
+
+def ensure_input_files(vcf_path: str, germline_vcf_file: str, pon_path: str) -> InputFiles:
+    """
+    Ensure that all input files exist and that output folder structure exists
+    Returns InputFiles
+    -------
+    """
+    vcf_path = Path(vcf_path)
+    vcf_is_good = verify_vcf(vcf_path)
+    for vcf_feature, is_present in vcf_is_good.items():
+        if not is_present:
+            raise ValueError(
+                f"VCF lacks {vcf_feature}. See README.md for instructions for instructions on how to construct an appropriate VCF file.")
+    if not os.path.exists(germline_vcf_file) or not germline_vcf_file.endswith(".vcf.gz") or not os.path.exists(germline_vcf_file + ".tbi"):
+        raise RuntimeError("Germline VCF file not found, or it's index file was not found, or it is not properly formatted (.vcf.gz")
+    pon_path = resolve_pon_path(pon_path)
+    return InputFiles(vcf_path, Path(germline_vcf_file), pon_path)
 
 # ---------------------------------------------------------------------------
 # Pipeline
 # ---------------------------------------------------------------------------
 
 def run_lspv_pipeline(
-    vcf_path: str | Path,
-    output_dir: str | Path,
+    vcf_path: Union[str, Path],
+    output_dir: Union[str, Path],
+    germline_vcf_file: str,
     patient_id: str = "",
-    # --- Annotation options ---
-    run_vep_annotation: bool = False,
-    vep_cache_dir: str | Path = "~/.vep",
-    vep_assembly: str = "GRCh38",
-    vep_use_cache: bool = False,
-    gnomad_path: str | Path | None = None,
-    gnomad_use_api: bool = True,
     # --- PoN options ---
-    pon_path: str | Path | None = None,
+    pon_path: Union[str, Path] = None,
     pon_pvalue_threshold: float = 0.05,
     # --- GMM options ---
     gmm_max_components: int = 5,
     clonality_pvalue_threshold: float = 0.05,
-    # --- VCF already PASS-filtered? ---
-    vcf_is_filtered: bool = False,
-    # --- VCF already gnomAD-annotated? ---
-    vcf_is_gnomad_annotated: bool = False,
 ) -> LspvResult:
     """
     Run the full LSPV identification pipeline.
@@ -127,25 +141,6 @@ def run_lspv_pipeline(
         Created automatically if it does not exist.
     patient_id : str
         Optional sample / patient label used in plot titles and filenames.
-    run_vep_annotation : bool
-        If ``True``, annotate the VCF with VEP via Docker before
-        processing. Requires Docker and the ``ensemblorg/ensembl-vep``
-        image. Set ``False`` (default) if the VCF is already annotated
-        or if you prefer to annotate externally.
-    vep_cache_dir : str or Path
-        Local VEP cache directory (used only when ``run_vep_annotation=True``
-        and ``vep_use_cache=True``).
-    vep_assembly : str
-        Genome assembly for VEP (``"GRCh38"`` or ``"GRCh37"``).
-    vep_use_cache : bool
-        Use local VEP cache (offline mode). Requires a pre-downloaded cache.
-    gnomad_path : str, Path, or None
-        Directory containing pre-built gnomAD position index files
-        (``chrom_pos.txt``). Pass ``None`` to skip local lookup.
-    gnomad_use_api : bool
-        Fall back to the gnomAD API for positions not in the local index.
-        Disable to avoid network calls (not recommended unless a complete
-        local index is provided).
     pon_path : str, Path, or None
         Path to a custom Panel of Normals CSV. Pass ``None`` (default) to
         use the built-in PoN bundled with the package.
@@ -156,13 +151,6 @@ def run_lspv_pipeline(
     clonality_pvalue_threshold : float
         Binomial p-value threshold for sub-clonal classification.
         Variants with p < threshold are labelled sub-clonal. Default: 0.05.
-    vcf_is_filtered : bool
-        Set ``True`` if the input VCF is already filtered to PASS variants,
-        to skip the PASS-filtering step.
-    vcf_is_gnomad_annotated : bool
-        Set ``True`` if the input VCF already has gnomAD annotation
-        (``GNOMAD`` and ``gnomad_AF`` INFO fields present), to skip the
-        gnomAD annotation step entirely.
 
     Returns
     -------
@@ -182,84 +170,43 @@ def run_lspv_pipeline(
     >>> print(result.summary)
     >>> result.lspvs.to_csv("lspvs_001.csv", index=False)
 
-    With a custom PoN and VEP annotation:
+    With a custom PoN
 
     >>> result = run_lspv_pipeline(
     ...     vcf_path="patient_001_diagnosis.vcf",
     ...     output_dir="results/patient_001/",
     ...     patient_id="001",
-    ...     run_vep_annotation=True,
-    ...     vep_assembly="GRCh38",
     ...     pon_path="/data/my_pon.csv",
     ... )
     """
-    vcf_path = Path(vcf_path)
+
+    # ------------------------------------------------------------------
+    # Step 3: Verify input and output files exist and are appropriate for Daisy
+    # ------------------------------------------------------------------
+
+    input_files = ensure_input_files(vcf_path, germline_vcf_file, pon_path)
+    vcf_path = input_files.vcf_file
+    germline_vcf_file = input_files.germline_file
+    pon_path = input_files.pon_file
     out_dir = ensure_output_dir(output_dir)
     label = patient_id or vcf_path.stem
 
     log.info("[%s] Starting LSPV pipeline", label)
 
-    # ------------------------------------------------------------------
-    # Step 1: PASS filter
-    # ------------------------------------------------------------------
-    if vcf_is_filtered:
-        pass_vcf = vcf_path
-        log.info("[%s] Skipping PASS filter (vcf_is_filtered=True)", label)
-    else:
-        pass_vcf = out_dir / f"{label}_pass.vcf"
-        log.info("[%s] Filtering to PASS variants → %s", label, pass_vcf)
-        filter_vcf_pass(vcf_path, pass_vcf)
 
-    # ------------------------------------------------------------------
-    # Step 2: VEP annotation (optional)
-    # ------------------------------------------------------------------
-    if run_vep_annotation:
-        vep_vcf = out_dir / f"{label}_pass_vep.vcf"
-        log.info("[%s] Running VEP annotation → %s", label, vep_vcf)
-        run_vep(
-            pass_vcf,
-            vep_vcf,
-            cache_dir=vep_cache_dir,
-            assembly=vep_assembly,
-            use_cache=vep_use_cache,
-        )
-        annotated_vcf = vep_vcf
-    else:
-        log.info("[%s] Skipping VEP (run_vep_annotation=False)", label)
-        annotated_vcf = pass_vcf
-
-    # ------------------------------------------------------------------
-    # Step 3: gnomAD annotation
-    # ------------------------------------------------------------------
-    if vcf_is_gnomad_annotated:
-        log.info("[%s] Skipping gnomAD annotation (vcf_is_gnomad_annotated=True)", label)
-        gnomad_vcf = annotated_vcf
-    else:
-        gnomad_vcf = out_dir / f"{label}_gnomad.vcf"
-        log.info("[%s] Running gnomAD annotation → %s", label, gnomad_vcf)
-        annotate_vcf(
-            annotated_vcf,
-            gnomad_vcf,
-            gnomad_path=gnomad_path,
-            use_api=gnomad_use_api,
-        )
 
     # ------------------------------------------------------------------
     # Step 4: Load into DataFrame and apply hard filters
     # ------------------------------------------------------------------
     log.info("[%s] Loading annotated VCF into DataFrame", label)
-    df = read_vcf(gnomad_vcf)
+    df = read_vcf(vcf_path)
 
     # Always extract hgvsp_short and so_term from the INFO field.
-    # Even when run_vep_annotation=False, the VCF is already VEP-annotated
-    # so extract_info() can parse coding variants correctly.
-    # Without this, hgvsp_short is set to None for all variants and
-    # coding variants are never filtered out of LSPVs.
     log.info("[%s] Extracting VEP INFO fields (hgvsp_short, so_term)", label)
     df = extract_info(df)
 
     log.info("[%s] Applying hard filters (germline, rs, indel)", label)
-    df = apply_hard_filters(df)
+    df = apply_hard_filters(df, germline_vcf_file)
 
     # ------------------------------------------------------------------
     # Step 5: Extract reads (depth + alt counts)

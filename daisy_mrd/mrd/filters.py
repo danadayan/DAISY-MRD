@@ -350,12 +350,11 @@ def apply_all_filters(
     df: pd.DataFrame,
     output_dir: str | Path,
     file_name: str,
-    pon: pd.DataFrame | None = None,
-    twobit_path: str | Path | None = None,
-    max_depth: int = 200,
-    germline_pvalue_threshold: float = 0.01,
-    pon_pvalue_threshold: float = 0.05,
-    max_vaf: float = 0.05,
+    pon: pd.DataFrame,
+    twobit_path: str,
+    max_depth: int,
+    germline_pvalue_threshold: float,
+    pon_pvalue_threshold: float,
 ) -> tuple[dict[str, pd.DataFrame], pd.DataFrame]:
     """
     Apply all filter layers sequentially, saving each layer to disk.
@@ -382,7 +381,6 @@ def apply_all_filters(
         Read-depth threshold for :func:`filter_high_depth`.
     germline_pvalue_threshold : float
     pon_pvalue_threshold : float
-    max_vaf : float
 
     Returns
     -------
@@ -412,11 +410,9 @@ def apply_all_filters(
 
     # Layer 1: context filter (C>TG / CG>A)
     if twobit_path is not None:
-        try:
-            current = add_flanking_nucleotides(current, twobit_path)
-            current = filter_noisy_context(current)
-        except ImportError as e:
-            warnings.warn(f"Context filter skipped: {e}")
+        current = add_flanking_nucleotides(current, twobit_path)
+        current = filter_noisy_context(current)
+
     else:
         warnings.warn(
             "twobit_path not provided — skipping C>TG/CG>A context filter. "
@@ -437,10 +433,8 @@ def apply_all_filters(
     current = _save(current, "no_xy_no_germline")
 
     # Layer 5: PoN
-    if pon is not None:
-        current = filter_pon_remission(current, pon, pvalue_threshold=pon_pvalue_threshold)
-    else:
-        warnings.warn("PoN not provided — skipping PoN filter.")
+    current = filter_pon_remission(current, pon, pvalue_threshold=pon_pvalue_threshold)
+
     current = _save(current, "no_xy_no_germline_no_pon")
 
 

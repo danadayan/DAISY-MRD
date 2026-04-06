@@ -4,12 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "daisy-mrd"
-version = "0.1.1"
+version = "0.1.2"
 description = "DAISY-MRD: Distributed Analysis of Integrated Sites for Yielding MRD — WGS-based measurable residual disease monitoring in pediatric AML"
 readme = "README.md"
 license = { text = "Technion" }
 authors = [
     { name = "Dana Dayan" },
+    {name = "Avraham Kahan"},
     { name = "Yosef Maruvka" },
 ]
 keywords = ["MRD", "AML", "leukemia", "WGS", "bioinformatics", "genomics"]

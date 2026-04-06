@@ -227,11 +227,7 @@ def run_mrd_single(
     # ------------------------------------------------------------------
     pon: pd.DataFrame | None = None
     resolved_pon = resolve_pon_path(pon_path)
-    try:
-        pon = load_pon(resolved_pon)
-        log.info("[%s] Loaded PoN from %s", label, resolved_pon)
-    except Exception as e:
-        log.warning("[%s] Could not load PoN (%s) — PoN filter will be skipped", label, e)
+    pon = load_pon(resolved_pon)
 
     # ------------------------------------------------------------------
     # Apply filter layers

@@ -19,6 +19,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from daisy_mrd.lspv.query_germline_vcf import remove_germline_variants
+
 
 # ---------------------------------------------------------------------------
 # File-level filter (PASS)
@@ -63,41 +65,46 @@ def filter_vcf_pass(input_vcf: str | Path, output_vcf: str | Path) -> Path:
 # DataFrame-level filters
 # ---------------------------------------------------------------------------
 
-def remove_germline_variants(vcf_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Remove variants that are likely germline based on gnomAD allele frequency.
+# def variant_in_germline_vcf(germline_vcf: Path, chrom: str, pos: int, ref: str, alt: str) -> bool:
+#     """
+#     Check if a variant (chrom, pos, ref, alt) exists in an indexed VCF using bcftools.
+#     """
+#     region = f"{chrom}:{pos}-{pos}"
+#     result = subprocess.run([
+#             "bcftools", "view", "-r", region, str(germline_vcf)
+#         ],
+#         capture_output=True, text=True, check=True
+#     )
+#     for line in result.stdout.splitlines():
+#         if line.startswith("#"):
+#             continue
+#
+#         fields = line.split("\t")
+#         rec_chrom = fields[0]
+#         rec_pos = int(fields[1])
+#         rec_ref = fields[3]
+#         rec_alts = fields[4]
+#
+#         if (rec_chrom == chrom and rec_pos == pos and rec_ref == ref and alt in rec_alts):
+#             return True
+#     return False
+#
+#
+# def remove_germline_variants(vcf_df: pd.DataFrame, germline_vcf_file: Path) -> pd.DataFrame:
+#     # uses germline vcf file to exclude all variants exactly matching a variant in the vcf file
+#     # maybe should wrap everything in a DB class
+#     # germline_positions = set_of_all_germline_positions(germline_vcf_file)
+#     vcf_df["KNOWN_GERMLINE_VARIANT"]=False
+#     for idx, row in vcf_df.iterrows():
+#         t=time.time()
+#         if int(row.POS)==101442512:
+#             croc=1
+#         if variant_in_germline_vcf(germline_vcf_file, row.CHROM, row.POS, row.REF, row.ALT):
+#             vcf_df.at[idx, 'KNOWN_GERMLINE_VARIANT'] = True
+#         print(time.time() - t)
+#     return vcf_df[~vcf_df["KNOWN_GERMLINE_VARIANT"]].drop(columns=["KNOWN_GERMLINE_VARIANT"]).reset_index(drop=True)
 
-    A variant is kept if **either**:
 
-    * Its gnomAD allele frequency (``AF`` column, added by ``annotate_vcf``)
-      is below 1 × 10⁻³, **or**
-    * It was not found in gnomAD at all (``GNOMAD`` column == ``"NO"``).
-
-    Also restricts to biallelic SNVs by requiring ``ALT`` to be a single
-    character (removes multi-allelic sites before the indel filter).
-
-    Parameters
-    ----------
-    vcf_df : pd.DataFrame
-        DataFrame produced by :func:`~daisy_mrd.utils.read_vcf` after
-        gnomAD annotation.
-
-    Returns
-    -------
-    pd.DataFrame
-        Filtered copy of the input DataFrame.
-    """
-    df = vcf_df.copy()
-
-    # Biallelic SNVs only (single-character ALT)
-    df = df[df["ALT"].str.len() == 1]
-
-    df["AF"] = pd.to_numeric(df.get("AF", pd.Series(dtype=float)), errors="coerce")
-
-    gnomad_col = df.get("GNOMAD", pd.Series("NO", index=df.index))
-    keep = (df["AF"] < 1e-3) | (gnomad_col == "NO")
-
-    return df[keep].copy()
 
 
 def remove_rs(vcf_df: pd.DataFrame) -> pd.DataFrame:
@@ -144,7 +151,7 @@ def remove_indels(vcf_df: pd.DataFrame) -> pd.DataFrame:
     return vcf_df[mask].copy()
 
 
-def apply_hard_filters(vcf_df: pd.DataFrame) -> pd.DataFrame:
+def apply_hard_filters(vcf_df: pd.DataFrame, germline_vcf_file: Path) -> pd.DataFrame:
     """
     Apply all three DataFrame-level hard filters in sequence:
 
@@ -158,13 +165,16 @@ def apply_hard_filters(vcf_df: pd.DataFrame) -> pd.DataFrame:
         Annotated VCF DataFrame (must have ``GNOMAD`` and ``AF`` columns
         if gnomAD annotation was run; otherwise germline removal falls
         back to gnomAD-absent logic only).
+    germline_vcf_file : Path
+        Path to common germline mutations. All such mutations will be filtered out
 
     Returns
     -------
     pd.DataFrame
         Hard-filtered DataFrame.
     """
-    df = remove_germline_variants(vcf_df)
+    df = vcf_df
+    df = remove_germline_variants(df, germline_vcf_file) # not really the optimal way to do it, but not important
     df = remove_rs(df)
     df = remove_indels(df)
     return df

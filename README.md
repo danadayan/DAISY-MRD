@@ -2,7 +2,7 @@
 
 **Distributed Analysis of Integrated Sites for Yielding MRD**
 
-A Python package for WGS-based measurable residual disease (MRD) monitoring in pediatric AML using leukemia-specific passenger variants (LSPVs).
+A Python package for WGS-based measurable residual disease (MRD) monitoring in pediatric AML using leukemia-specific passenger variants (LSPVs). Currently only supports HG38 aligned VCF files
 
 ---
 
@@ -14,11 +14,11 @@ Diagnosis WGS (VCF)                 Remission BAM/CRAM
   ┌────▼────────────────────┐    ┌────────────▼──────────────┐
   │    Step 1: LSPV ID      │    │    Step 2: MRD Scoring    │
   │                         │    │                           │
-  │  • PASS filter          │    │  • samtools mpileup       │
-  │  • gnomAD annotation    │    │    over LSPV positions    │
-  │  • PoN filter           │    │  • Count reads            │
-  │  • GMM clonality fit    │────▶  • Noise filtering        │
-  │  • Remove coding vars   │    │  • DAISY-MRD score        │
+  │  • PASS filter          │    │  • pileup over LSPV       │
+  │  • PoN filter           │    │    positions              │
+  │  • GMM clonality fit    │    │  • Count reads            │
+  │  • Remove coding vars   │────▶  • Noise filtering        │
+  │                         │    │  • DAISY-MRD score        │
   └─────────────────────────┘    └───────────────────────────┘
            │                                  │
      LSPVs CSV                     score = Σ(alt) / Σ(depth)
@@ -31,8 +31,11 @@ Diagnosis WGS (VCF)                 Remission BAM/CRAM
 ---
 
 ## Installation
+To run Daisy-MRD, you will need the code and germline variants data file. If your VCF files are not already VEP annotated,
+you will need to install the VEP annotation software as well. Instructions for all these steps can be seen below
 
-### GitHub
+### Code Installation
+#### GitHub
 
 ```bash
 git clone https://github.com/danadayan/daisy-mrd.git
@@ -40,11 +43,34 @@ cd daisy-mrd
 pip install -e .
 ```
 
-### PyPI
+#### PyPI
 
 ```bash
 pip install daisy-mrd==0.1.1
 ```
+
+### Germline Variants Data File
+This file will be used later, so remember where you downloaded it. It is about 200MB
+```bash
+wget https://zenodo.org/records/19442847/files/hg38_snvs.vcf.gz
+# download the index as well to the same location
+wget https://zenodo.org/records/19442847/files/hg38_snvs.vcf.gz.tbi
+
+```
+### VEP annotation software
+If your VCF files are already VEP annotated, this step can be skipped. Otherwise, here is one way to install the requisite 
+software to annotate your VCF files. Other ways may be used, but this is the simplest and fastest way.
+```bash
+# pull the VEP docker
+docker pull ensemblorg/ensembl-vep  
+
+# download the VEP cache: $VEP_DATA_DIRECTORY should be the desired download location of the vep data
+docker run -it   -v $VEP_DATA_DIRECTORY:/data   ensemblorg/ensembl-vep   INSTALL.pl   --CACHE_VERSION 115  
+ --SPECIES homo_sapiens   --ASSEMBLY GRCh38   --CACHE_DIR /data --AUTO cf
+ 
+```
+
+
 
 ### Requirements
 
@@ -59,6 +85,7 @@ pip install daisy-mrd==0.1.1
 | seaborn | ≥ 0.12 |
 | requests | ≥ 2.28 |
 | samtools | ≥ 1.17 (external binary, required for Step 2) |
+| bcftools | > 1.10 (external binary) | 
 
 **Optional dependencies:**
 
@@ -71,6 +98,16 @@ pip install daisy-mrd==0.1.1
 
 ## Quick Start
 
+
+### Step 0 - VEP annotations and filtering - skip if VCF is already VEP annotated and filtered
+```bash
+# VEP annotate using the annotate.sh at the top level directory
+# $INPUT_VCF_FILE is the existing VCF file. $OUTPUT_VCF_FILE will be created
+# $VEP_DATA_DIRECTORY is the same location as was used in the VEP install
+bash annotate.sh $INPUT_VCF_FILE $OUTPUT_VCF_FILE $VEP_DATA_DIRECTORY
+```
+
+
 ### Step 1 — Identify LSPVs from a diagnosis VCF
 
 ```python
@@ -80,20 +117,15 @@ lspv_result = run_lspv_pipeline(
     vcf_path                = DIAGNOSIS_VCF,
     output_dir              = f"results/{PATIENT_ID}/lspv/",
     patient_id              = PATIENT_ID,
-
-    run_vep_annotation      = False, # False for annotated files, True if annotation required
-    vcf_is_filtered         = True,  # True for filtered (FILTER == PASS)
-    vcf_is_gnomad_annotated = True,  # True if gnomad annotation exist
-    
 )
 
-print(result.summary)
+print(lspv_result.summary)
 #    patient  total_variants  clonal  subclonal  n_lspvs
 # 0      001            1204     892        312      734
 
-result.lspvs.head()       # DataFrame of LSPVs
-result.fig_gmm.show()     # Gaussian Mixture Model plot
-result.fig_pie.show()     # Clonal vs sub-clonal pie chart
+lspv_result.lspvs.head()       # DataFrame of LSPVs
+lspv_result.fig_gmm.show()     # Gaussian Mixture Model plot
+lspv_result.fig_pie.show()     # Clonal vs sub-clonal pie chart
 ```
 
 ### Step 2 — Compute DAISY-MRD score from a remission BAM/CRAM
@@ -224,24 +256,23 @@ Every function is importable on its own:
 
 ```python
 # Step 1
-from daisy_mrd.lspv.filter   import filter_vcf_pass, apply_hard_filters
-from daisy_mrd.lspv.annotate import annotate_vcf, run_vep
-from daisy_mrd.lspv.reads    import extract_info, get_reads, get_vaf
-from daisy_mrd.lspv.pon      import load_pon, filter_pon
-from daisy_mrd.lspv.gmm      import fit_gmm, get_clonal_peak_mean, label_clonality, plot_gmm
+from daisy_mrd.lspv.filter import filter_vcf_pass, apply_hard_filters
+from daisy_mrd.lspv.reads import extract_info, get_reads, get_vaf
+from daisy_mrd.lspv.pon import load_pon, filter_pon
+from daisy_mrd.lspv.gmm import fit_gmm, get_clonal_peak_mean, label_clonality, plot_gmm
 from daisy_mrd.lspv.identify import extract_lspvs, plot_clonality_pie
-from daisy_mrd.utils         import read_vcf
+from daisy_mrd.utils import read_vcf
 
 # Step 2
-from daisy_mrd.mrd.pileup    import run_mpileup, pileup_to_df, merge_lspv_alts
+from daisy_mrd.mrd.pileup import run_mpileup, pileup_to_df, merge_lspv_alts
 from daisy_mrd.mrd.readcount import apply_read_counts
-from daisy_mrd.mrd.filters   import (
+from daisy_mrd.mrd.filters import (
     add_flanking_nucleotides, filter_noisy_context,
     filter_sex_chromosomes, filter_high_depth,
-    filter_germline, filter_pon_remission, filter_high_vaf,
-    apply_all_filters,
+    filter_germline, filter_pon_remission, 
+    apply_all_filters
 )
-from daisy_mrd.mrd.score     import compute_mrd_score, plot_noise_distributions
+from daisy_mrd.mrd.score import compute_mrd_score, plot_noise_distributions
 ```
 
 ---
@@ -286,4 +317,4 @@ If you use daisy-mrd in your research, please cite:
 
 ## License
 
-© 2026 Dana Dayan, Yosef Maruvka — Maruvka Lab, Technion
+© 2026 Dana Dayan, Avraham Kahan, Yosef Maruvka — Maruvka Lab, Technion

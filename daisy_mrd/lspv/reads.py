@@ -88,8 +88,8 @@ def extract_info(vcf_df: pd.DataFrame) -> pd.DataFrame:
     pd.DataFrame
         Input DataFrame with ``so_term`` and ``hgvsp_short`` added.
     """
-    so_terms: list[str | None] = []
-    gene_hgvsps: list[str | None] = []
+    so_terms: list[str] = []
+    gene_hgvsps: list[str] = []
 
     impact_patterns = [
         re.compile(r"\|([^|]+)\|HIGH"),
@@ -107,6 +107,8 @@ def extract_info(vcf_df: pd.DataFrame) -> pd.DataFrame:
             if m:
                 so_term = m.group(1)
                 break
+        # if so_term is None:
+        #     raise ValueError("Given VCF is not VEP annotated. Instructions for adding VEP annotation can be found in the README.md")
 
         gene_m = gene_re.search(str(info_string))
         gene = gene_m.group(1) if gene_m else None
